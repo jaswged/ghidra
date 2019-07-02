@@ -23,20 +23,21 @@ import generic.continues.GenericFactory;
 import generic.continues.RethrowContinuesFactory;
 import ghidra.app.util.MemoryBlockUtil;
 import ghidra.app.util.Option;
-import ghidra.app.util.bin.*;
+import ghidra.app.util.bin.BinaryReader;
+import ghidra.app.util.bin.ByteProvider;
 import ghidra.app.util.bin.format.mz.DOSHeader;
 import ghidra.app.util.bin.format.pe.*;
 import ghidra.app.util.bin.format.pe.PortableExecutable.SectionLayout;
 import ghidra.app.util.bin.format.pe.debug.DebugCOFFSymbol;
 import ghidra.app.util.bin.format.pe.debug.DebugDirectoryParser;
-import ghidra.app.util.demangler.*;
 import ghidra.app.util.importer.*;
 import ghidra.framework.model.DomainObject;
 import ghidra.framework.options.Options;
 import ghidra.program.model.address.*;
 import ghidra.program.model.data.*;
 import ghidra.program.model.listing.*;
-import ghidra.program.model.mem.*;
+import ghidra.program.model.mem.Memory;
+import ghidra.program.model.mem.MemoryAccessException;
 import ghidra.program.model.reloc.RelocationTable;
 import ghidra.program.model.symbol.*;
 import ghidra.program.model.util.AddressSetPropertyMap;
@@ -160,7 +161,7 @@ public class PeLoader extends AbstractPeDebugLoader {
 		catch (MemoryAccessException e) {
 			throw new IOException(e);
 		}
-		monitor.setMessage(program.getName() + ": done!");
+		monitor.setMessage("[" + program.getName() + "]: done!");
 	}
 
 	@Override
@@ -289,7 +290,7 @@ public class PeLoader extends AbstractPeDebugLoader {
 		if (monitor.isCancelled()) {
 			return;
 		}
-		monitor.setMessage(prog.getName() + ": processing relocation tables...");
+		monitor.setMessage("[" + prog.getName() + "]: processing relocation tables...");
 
 		DataDirectory[] dataDirectories = optionalHeader.getDataDirectories();
 		if (dataDirectories.length <= OptionalHeader.IMAGE_DIRECTORY_ENTRY_BASERELOC) {
@@ -375,7 +376,7 @@ public class PeLoader extends AbstractPeDebugLoader {
 		if (monitor.isCancelled()) {
 			return;
 		}
-		monitor.setMessage(program.getName() + ": processing imports...");
+		monitor.setMessage("[" + program.getName() + "]: processing imports...");
 
 		DataDirectory[] dataDirectories = optionalHeader.getDataDirectories();
 		if (dataDirectories.length <= OptionalHeader.IMAGE_DIRECTORY_ENTRY_IMPORT) {
@@ -470,7 +471,7 @@ public class PeLoader extends AbstractPeDebugLoader {
 		if (monitor.isCancelled()) {
 			return;
 		}
-		monitor.setMessage(program.getName() + ": processing exports...");
+		monitor.setMessage("[" + program.getName() + "]: processing exports...");
 
 		DataDirectory[] dataDirectories = optionalHeader.getDataDirectories();
 		if (dataDirectories.length <= OptionalHeader.IMAGE_DIRECTORY_ENTRY_EXPORT) {
@@ -506,21 +507,6 @@ public class PeLoader extends AbstractPeDebugLoader {
 			}
 			catch (InvalidInputException e) {
 				// Don't create invalid symbol
-			}
-
-			DemangledObject demangledObj = null;
-			try {
-				demangledObj = DemanglerUtil.demangle(program, name);
-			}
-			catch (Exception e) {
-				//log.appendMsg("Unable to demangle: "+name);
-			}
-			if (demangledObj != null) {
-				String comment = demangledObj.getSignature(true);
-				if (hasComment(CodeUnit.PLATE_COMMENT, address)) {
-					comment = "\n" + comment;
-				}
-				setComment(CodeUnit.PLATE_COMMENT, address, comment);
 			}
 
 			try {
@@ -574,41 +560,6 @@ public class PeLoader extends AbstractPeDebugLoader {
 					// Nothing to do...just continue on
 				}
 			}
-
-			//if this export is not in an executable section,
-			//then it is a DATA export.
-			//see if it is a pointer, otherwise make it an undefined1
-			MemoryBlock block = memory.getBlock(address);
-			if (block != null && !block.isExecute()) {
-				try {
-					if (demangledObj instanceof DemangledVariable) {
-						DemangledVariable demangledVar = (DemangledVariable) demangledObj;
-						DemangledDataType ddt = demangledVar.getDataType();
-						DataType dt =
-							ddt == null ? null : ddt.getDataType(program.getDataTypeManager());
-						if (dt != null && dt.getLength() > 0) {
-							listing.createData(address, dt);
-						}
-						else {
-							listing.createData(address, new Undefined1DataType());
-						}
-					}
-					else {
-						listing.createData(address, StructConverter.POINTER,
-							address.getPointerSize());
-						Data data = listing.getDataAt(address);
-						Address ptr = data.getAddress(0);
-						if (ptr == null || !memory.contains(ptr)) {
-							listing.clearCodeUnits(data.getMinAddress(), data.getMaxAddress(),
-								false);
-							listing.createData(address, new Undefined1DataType());
-						}
-					}
-				}
-				catch (DataTypeConflictException | CodeUnitInsertionException e) {
-					// Nothing to do...just continue on
-				}
-			}
 		}
 	}
 
@@ -623,7 +574,7 @@ public class PeLoader extends AbstractPeDebugLoader {
 		if (monitor.isCancelled()) {
 			return sectionNumberToAddress;
 		}
-		monitor.setMessage(prog.getName() + ": processing memory blocks...");
+		monitor.setMessage("[" + prog.getName() + "]: processing memory blocks...");
 
 		NTHeader ntHeader = pe.getNTHeader();
 		FileHeader fileHeader = ntHeader.getFileHeader();
@@ -683,7 +634,8 @@ public class PeLoader extends AbstractPeDebugLoader {
 					try (InputStream dataStream = sections[i].getDataStream()) {
 						int dataSize =
 							((rawDataSize > virtualSize && virtualSize > 0) || rawDataSize < 0)
-									? virtualSize : rawDataSize;
+									? virtualSize
+									: rawDataSize;
 						if (ntHeader.checkRVA(dataSize) ||
 							(0 < dataSize && dataSize < pe.getFileLength())) {
 							if (!ntHeader.checkRVA(dataSize)) {
@@ -774,7 +726,7 @@ public class PeLoader extends AbstractPeDebugLoader {
 		if (monitor.isCancelled()) {
 			return;
 		}
-		monitor.setMessage(prog.getName() + ": processing entry points...");
+		monitor.setMessage("[" + prog.getName() + "]: processing entry points...");
 
 		OptionalHeader optionalHeader = ntHeader.getOptionalHeader();
 		AddressFactory af = prog.getAddressFactory();
@@ -808,7 +760,7 @@ public class PeLoader extends AbstractPeDebugLoader {
 		if (monitor.isCancelled()) {
 			return;
 		}
-		monitor.setMessage(program.getName() + ": processing debug information...");
+		monitor.setMessage("[" + program.getName() + "]: processing debug information...");
 
 		DataDirectory[] dataDirectories = optionalHeader.getDataDirectories();
 		if (dataDirectories.length <= OptionalHeader.IMAGE_DIRECTORY_ENTRY_DEBUG) {

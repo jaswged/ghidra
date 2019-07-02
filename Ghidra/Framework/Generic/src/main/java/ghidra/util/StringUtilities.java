@@ -18,6 +18,7 @@ package ghidra.util;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -138,7 +139,9 @@ public class StringUtilities {
 	}
 
 	/**
-	 * Returns true if the character is displayable.
+	 * Returns true if the character is in displayable character range
+	 * @param c the character
+	 * @return true if the character is in displayable character range
 	 */
 	public static boolean isDisplayable(int c) {
 		return c >= 0x20 && c < 0x7F;
@@ -548,33 +551,6 @@ public class StringUtilities {
 	}
 
 	/**
-	 * Convert a string array to single string with new line chars.
-	 */
-	public static String convertStringArray(String[] strings) {
-		return convertStringArray(strings, "\n");
-	}
-
-	/**
-	 * Convert a string array to single string with the given delimiter.
-	 */
-	public static String convertStringArray(String[] strings, String delimiter) {
-		if (strings == null || strings.length == 0) {
-			return null;
-		}
-		StringBuffer sb = new StringBuffer();
-		for (int i = 0; i < strings.length; i++) {
-			if (strings[i] == null) {
-				continue;
-			}
-			sb.append(strings[i]);
-			if (i < strings.length - 1) {
-				sb.append(delimiter);
-			}
-		}
-		return sb.toString();
-	}
-
-	/**
 	 * Parses a string containing multiple lines into an array where each
 	 * element in the array contains only a single line. The "\n" character is
 	 * used as the delimiter for lines.
@@ -638,6 +614,7 @@ public class StringUtilities {
 	 * @param source the original string to pad.
 	 * @param filler the type of characters with which to pad
 	 * @param length the length of padding to add (0 results in no changes)
+	 * @return the padded string
 	 * @deprecated use {@link #pad(String, char, int)}; functionally the same, but smaller
 	 *             and more consistent name
 	 */
@@ -654,6 +631,7 @@ public class StringUtilities {
 	 * @param source the original string to pad.
 	 * @param filler the type of characters with which to pad
 	 * @param length the length of padding to add (0 results in no changes)
+	 * @return the padded string
 	 */
 	public static String pad(String source, char filler, int length) {
 
@@ -690,6 +668,7 @@ public class StringUtilities {
 	 * This is useful for constructing complicated <code>toString()</code> representations.
 	 *
 	 * @param s the input string
+	 * @param indent the indent string; this will be appended as needed
 	 * @return the output string
 	 */
 	public static String indentLines(String s, String indent) {
@@ -868,27 +847,20 @@ public class StringUtilities {
 	}
 
 	/**
-	 * Turn the given list into an attractive string, with the separator of you choosing.
+	 * Turn the given data into an attractive string, with the separator of your choosing
 	 *
-	 * @param list the list from which a string will be generated
+	 * @param collection the data from which a string will be generated
 	 * @param separator the string used to separate elements
 	 * @return a string representation of the given list
 	 */
-	public static String toString(List<?> list, String separator) {
-		if (list == null) {
+	public static String toString(Collection<?> collection, String separator) {
+		if (collection == null) {
 			return null;
 		}
 
-		StringBuffer buffer = new StringBuffer("[ ");
-		for (int i = 0; i < list.size(); i++) {
-			buffer.append(list.get(i).toString());
-			if (i + 1 < list.size()) {
-				buffer.append(separator);
-			}
-		}
-
-		buffer.append(" ]");
-		return buffer.toString();
+		String asString =
+			collection.stream().map(o -> o.toString()).collect(Collectors.joining(separator));
+		return "[ " + asString + " ]";
 	}
 
 	public static String toStringWithIndent(Object o) {
